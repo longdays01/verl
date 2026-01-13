@@ -324,7 +324,7 @@ class FSDPSFTTrainer:
 
         log_gpu_memory_usage("After initialize optimizer", logger=logger)
 
-        self.steps_per_epoch = len(self.train_dataloader)
+        self.steps_per_epoch = max(1, len(self.train_dataloader))
         self.total_steps = self.steps_per_epoch * self.config.trainer.total_epochs
 
         if self.device_mesh.get_rank() == 0:
@@ -540,7 +540,7 @@ class FSDPSFTTrainer:
                 f.write(str(step))
             os.rename(temp_tracker_file, tracker_file)
             print(f"Updated checkpoint tracker: {tracker_file}")
-
+            
         # Copy to HDFS if configured
         if self.device_mesh.get_rank() == 0 and getattr(self.config.trainer, "default_hdfs_dir", None):
             hdfs_io.makedirs(self.config.trainer.default_hdfs_dir, exist_ok=True)
@@ -714,6 +714,33 @@ class FSDPSFTTrainer:
 
         # Calculate which epoch we're starting from for sampler.set_epoch()
         start_epoch = global_step // self.steps_per_epoch
+        
+        # Run validation before training if configured
+        if self.config.trainer.get("val_before_train", False) and global_step == 0:
+            log_with_rank(
+                "Running validation before training...",
+                logger=logger,
+                rank=rank,
+                log_only_rank_0=True,
+            )
+            val_losses = []
+            for val_data in self.val_dataloader:
+                val_data = TensorDict(val_data, batch_size=self.config.data.micro_batch_size_per_gpu).to(
+                    self.device_name
+                )
+                val_loss = self.validation_step(val_data)
+                val_losses.append(val_loss)
+            if rank == 0:
+                val_loss = torch.mean(torch.stack(val_losses))
+                metric = {"val/loss": val_loss.detach().item()}
+                tracking.log(data=metric, step=0)
+                log_with_rank(
+                    f"Validation before training - loss: {val_loss.detach().item():.4f}",
+                    logger=logger,
+                    rank=rank,
+                    log_only_rank_0=True,
+                )
+            torch.distributed.barrier()
 
         for epoch in range(start_epoch, self.config.trainer.total_epochs):
             self.train_sampler.set_epoch(epoch=epoch)

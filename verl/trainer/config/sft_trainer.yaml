@@ -23,6 +23,10 @@ data:
     path: null
     name: null
   use_shm: False
+  rllm:
+    tokenize_and_mask_method: cumulative  # cumulative, stepwise, role_aware, or tool_aware
+    assistant_weight: 1.0  # Loss weight for assistant messages
+    tool_weight: 0.5  # Loss weight for tool outputs
 model:
   partial_pretrain: ~/models/gemma-1.1-7b-it
   use_shm: False
@@ -58,6 +62,7 @@ trainer:
   total_training_steps: null
   logger: [ 'console', 'wandb' ]
   seed: 1
+  val_before_train: true  # Run validation before training starts
 
   save_freq: -1
   test_freq: -1

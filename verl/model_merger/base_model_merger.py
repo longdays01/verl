@@ -125,6 +125,9 @@ class ModelMergerConfig:
 
 
 def generate_config_from_args(args: argparse.Namespace) -> ModelMergerConfig:
+    # Determine hf_model_config_path: use explicit argument if provided, otherwise default to local_dir/huggingface
+    hf_model_config_path = args.hf_model_config_path if hasattr(args, 'hf_model_config_path') and args.hf_model_config_path else os.path.join(args.local_dir, "huggingface")
+    
     common_config_args = {
         "operation": args.operation,
         "backend": args.backend,
@@ -132,7 +135,7 @@ def generate_config_from_args(args: argparse.Namespace) -> ModelMergerConfig:
         "trust_remote_code": args.trust_remote_code,
         "is_value_model": args.is_value_model,
         "local_dir": args.local_dir,
-        "hf_model_config_path": os.path.join(args.local_dir, "huggingface"),
+        "hf_model_config_path": hf_model_config_path,
         "use_cpu_initialization": args.use_cpu_initialization,
     }
 

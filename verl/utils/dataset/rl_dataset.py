@@ -164,7 +164,15 @@ class RLHFDataset(Dataset):
             else:
 
                 def doc2len(doc) -> int:
-                    return len(tokenizer.apply_chat_template(doc[prompt_key], add_generation_prompt=True))
+                    prompt = doc[prompt_key]
+                    # Handle JSON-encoded prompts
+                    if isinstance(prompt, str):
+                        import json
+                        try:
+                            prompt = json.loads(prompt)
+                        except json.JSONDecodeError:
+                            return 0
+                    return len(tokenizer.apply_chat_template(prompt, add_generation_prompt=True))
 
             dataframe = dataframe.filter(
                 lambda doc: doc2len(doc) <= self.max_prompt_length,
@@ -188,7 +196,15 @@ class RLHFDataset(Dataset):
         return len(self.dataframe)
 
     def _build_messages(self, example: dict):
-        messages: list = example.pop(self.prompt_key)
+        messages = example.pop(self.prompt_key)
+        
+        # Handle JSON-encoded prompts (e.g., from gorilla dataset parquet)
+        if isinstance(messages, str):
+            import json
+            try:
+                messages = json.loads(messages)
+            except json.JSONDecodeError:
+                messages = []
 
         if self.image_key in example or self.video_key in example:
             for message in messages:
@@ -316,10 +332,18 @@ class RLHFDataset(Dataset):
             row_dict["full_prompts"] = raw_prompt  # array of strings
 
         # add index for each prompt
-        index = row_dict.get("extra_info", {}).get("index", 0)
-        tools_kwargs = row_dict.get("extra_info", {}).get("tools_kwargs", {})
-        interaction_kwargs = row_dict.get("extra_info", {}).get("interaction_kwargs", {})
-        need_tools_kwargs = row_dict.get("extra_info", {}).get("need_tools_kwargs", self.need_tools_kwargs)
+        # extra_info may be JSON-encoded as a string in some datasets (e.g., gorilla)
+        extra_info = row_dict.get("extra_info", {})
+        if isinstance(extra_info, str):
+            import json
+            try:
+                extra_info = json.loads(extra_info)
+            except json.JSONDecodeError:
+                extra_info = {}
+        index = extra_info.get("index", 0)
+        tools_kwargs = extra_info.get("tools_kwargs", {})
+        interaction_kwargs = extra_info.get("interaction_kwargs", {})
+        need_tools_kwargs = extra_info.get("need_tools_kwargs", self.need_tools_kwargs)
         if need_tools_kwargs and not tools_kwargs:
             logger.warning("tools_kwargs is empty for index {}, data source: {}", index, row_dict["data_source"])
         row_dict["index"] = index

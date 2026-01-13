@@ -82,9 +82,12 @@ class SFTDataset(Dataset):
             return ls
 
         dataframes = []
-        for parquet_file in self.parquet_files:
-            # read parquet files and cache
-            dataframe = pd.read_parquet(parquet_file)
+        for data_file in self.parquet_files:
+            # read parquet or jsonl files and cache
+            if data_file.endswith('.jsonl') or data_file.endswith('.json'):
+                dataframe = pd.read_json(data_file, lines=data_file.endswith('.jsonl'))
+            else:
+                dataframe = pd.read_parquet(data_file)
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)
         self.prompts = self.dataframe[self.prompt_key]
